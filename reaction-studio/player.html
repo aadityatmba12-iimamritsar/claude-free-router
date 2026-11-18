@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reaction Player</title>
+<style>
+  :root { --pink:#ff3ea5; --cyan:#22e4ff; --bg:#000; }
+  html,body { margin:0; height:100%; background:var(--bg); overflow:hidden; font-family: "Arial Black", Impact, sans-serif; }
+  #stage { position:relative; width:100%; height:100%; display:flex; align-items:center; justify-content:center; }
+  video { max-width:100%; max-height:100%; border:6px solid var(--pink); box-shadow:0 0 32px var(--pink), inset 0 0 0 3px var(--cyan); background:#000; }
+  #credit { position:absolute; left:16px; bottom:16px; color:#fff; font-size:28px; padding:6px 14px;
+            background:linear-gradient(90deg,var(--pink),#7a2bff); text-shadow:2px 2px 0 #000; }
+  #count  { position:absolute; right:16px; top:16px; color:var(--cyan); font-size:22px; text-shadow:2px 2px 0 #000; }
+  #hint   { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); color:#fff; font:16px/1.5 sans-serif; text-align:center; }
+  .hide { display:none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <video id="v" playsinline></video>
+  <div id="credit" class="hide"></div>
+  <div id="count"></div>
+  <div id="hint">Loading playlist.json…<br>Serve this folder: <code>python -m http.server 8000</code></div>
+</div>
+<script>
+// Hotkeys: Space pause/play · N / → next · P / ← previous · R replay · M mute · S shuffle
+const q = new URLSearchParams(location.search);
+const GAP_MS = Number(q.get("gap") ?? 1500);       // pause between clips (time to react)
+const LOOP = q.get("loop") !== "0";
+const v = document.getElementById("v"), credit = document.getElementById("credit"),
+      count = document.getElementById("count"), hint = document.getElementById("hint");
+let list = [], i = 0;
+
+function show(n) {
+  if (!list.length) return;
+  i = (n + list.length) % list.length;
+  const it = list[i];
+  v.src = it.src; v.play().catch(() => { hint.textContent = "Click once to start playback"; hint.classList.remove("hide"); });
+  credit.textContent = it.credit ? "🎥 " + it.credit : "";
+  credit.classList.toggle("hide", !it.credit);
+  count.textContent = `${i + 1} / ${list.length}`;
+}
+v.addEventListener("playing", () => hint.classList.add("hide"));
+v.addEventListener("ended", () => {
+  if (i === list.length - 1 && !LOOP) return;
+  setTimeout(() => show(i + 1), GAP_MS);
+});
+document.addEventListener("click", () => v.paused && v.play());
+document.addEventListener("keydown", e => {
+  const k = e.key.toLowerCase();
+  if (k === " ") { e.preventDefault(); v.paused ? v.play() : v.pause(); }
+  else if (k === "n" || k === "arrowright") show(i + 1);
+  else if (k === "p" || k === "arrowleft") show(i - 1);
+  else if (k === "r") { v.currentTime = 0; v.play(); }
+  else if (k === "m") v.muted = !v.muted;
+  else if (k === "s") { list.sort(() => Math.random() - .5); show(0); }
+});
+fetch(q.get("list") || "playlist.json").then(r => r.json()).then(d => {
+  list = d; if (!list.length) { hint.textContent = "playlist.json is empty"; return; } show(0);
+}).catch(() => { hint.innerHTML = "Could not load playlist.json.<br>Run <code>python studio.py playlist</code>, then serve this folder: <code>python -m http.server 8000</code>"; });
+</script>
+</body>
+</html>

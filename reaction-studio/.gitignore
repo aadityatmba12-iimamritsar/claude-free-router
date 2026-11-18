@@ -1,0 +1,5 @@
+raw/
+clips/
+*.mp4
+*.mkv
+playlist.json
