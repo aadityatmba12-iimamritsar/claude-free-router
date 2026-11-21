@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Live Clipper</title>
+<style>
+:root{--bg:#0b0b0b;--panel:#151515;--line:#262626;--fg:#f2f2f2;--mut:#9a9a9a;--acc:#FFC23D;--bad:#FF5A4E;--ok:#3ddc84}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 Inter,system-ui,sans-serif}
+header{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line)}
+header b{font-size:18px;letter-spacing:.04em}header b span{color:var(--acc)}
+#live{font-size:12px;font-weight:700;padding:2px 8px;border-radius:4px;background:var(--bad);display:none}
+#title{color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+main{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:16px;padding:16px;max-width:1500px;margin:auto}
+@media(max-width:960px){main{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+#playerWrap{position:relative;aspect-ratio:16/9;background:#000;border-radius:10px;overflow:hidden}
+#player,#playerWrap iframe{position:absolute;inset:0;width:100%;height:100%}
+#empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--mut);text-align:center;padding:20px}
+#marks{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 0;align-items:center}
+.chip{background:#1f1f1f;border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-variant-numeric:tabular-nums}
+.chip.on{border-color:var(--acc);color:var(--acc)}
+button{background:#222;color:var(--fg);border:1px solid #333;border-radius:8px;padding:7px 12px;font:inherit;cursor:pointer}
+button:hover{border-color:var(--acc)}button.pri{background:var(--acc);color:#111;border-color:var(--acc);font-weight:700}
+#cmdbar{display:flex;gap:8px;margin-top:14px}
+#cmd{flex:1;background:#000;color:var(--fg);border:1px solid #333;border-radius:8px;padding:11px 14px;font:15px ui-monospace,Menlo,Consolas,monospace}
+#cmd:focus{outline:none;border-color:var(--acc)}
+#out{font:13px/1.5 ui-monospace,Menlo,Consolas,monospace;height:150px;overflow:auto;margin-top:10px;color:var(--mut);white-space:pre-wrap}
+#out .e{color:var(--bad)}#out .k{color:var(--acc)}#out .u{color:var(--fg)}
+h3{margin:0 0 10px;font-size:13px;letter-spacing:.12em;color:var(--acc)}
+#peaks{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.job{border-top:1px solid var(--line);padding:10px 0}.job:first-child{border-top:0}
+.job .st{font-size:12px;font-weight:700;text-transform:uppercase}.st.done{color:var(--ok)}.st.error{color:var(--bad)}.st.running,.st.queued{color:var(--acc)}
+.job pre{margin:6px 0 0;font-size:11px;color:var(--mut);white-space:pre-wrap;word-break:break-all;max-height:70px;overflow:auto}
+.job video{width:100%;margin-top:8px;border-radius:6px;background:#000}
+.job a{color:var(--acc);margin-right:10px}
+kbd{background:#222;border:1px solid #333;border-radius:4px;padding:0 5px;font-size:12px}
+.help{color:var(--mut);font-size:13px;margin-top:10px}
+</style></head><body>
+<header><b>LIVE <span>CLIPPER</span></b><span id="live">LIVE</span><span id="title">Paste a YouTube live stream or video link below</span></header>
+<main>
+<section>
+  <div id="playerWrap"><div id="player"></div><div id="empty">Type <code>&nbsp;load &lt;YouTube URL&gt;&nbsp;</code> or just paste a link into the command bar.</div></div>
+  <div id="marks">
+    <span class="chip" id="mIn">IN —</span><span class="chip" id="mOut">OUT —</span>
+    <span class="chip" id="mVert">9:16 OFF</span>
+    <button onclick="exec('in')">Mark in <kbd>I</kbd></button><button onclick="exec('out')">Mark out <kbd>O</kbd></button>
+    <button class="pri" onclick="exec('clip')">Clip marks <kbd>C</kbd></button>
+    <button class="pri" onclick="exec('clip 30')">Last 30s <kbd>L</kbd></button>
+  </div>
+  <div id="peaks"></div>
+  <div id="cmdbar"><input id="cmd" placeholder="command… try: help" autocomplete="off" spellcheck="false"><button class="pri" onclick="submit()">Run</button></div>
+  <div id="out" class="panel"></div>
+  <div class="help">Hotkeys (outside the command bar): <kbd>I</kbd> in · <kbd>O</kbd> out · <kbd>C</kbd> clip marks · <kbd>L</kbd> last 30s · <kbd>V</kbd> toggle 9:16 · <kbd>/</kbd> command bar</div>
+</section>
+<aside class="panel"><h3>CLIPS</h3><div id="jobs"><div class="help">No clips yet.</div></div></aside>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const S={url:"",info:null,inT:null,outT:null,vertical:false,pass:"",player:null,history:[],hi:-1};
+try{S.pass=localStorage.getItem("clipperPass")||"";S.vertical=localStorage.getItem("clipperVert")==="1"}catch(e){}
+const fmt=s=>{if(s==null||isNaN(s))return"—";s=Math.max(0,s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=(s%60).toFixed(1).padStart(4,"0");return(h?h+":"+String(m).padStart(2,"0"):m)+":"+x};
+const parseT=t=>{if(/^\d+(\.\d+)?$/.test(t))return+t;const p=t.split(":").map(Number);if(p.some(isNaN))return NaN;return p.reduce((a,b)=>a*60+b,0)};
+function say(msg,cls=""){const d=document.createElement("div");d.className=cls;d.textContent=msg;$("out").appendChild(d);$("out").scrollTop=1e9}
+function marks(){$("mIn").textContent="IN "+fmt(S.inT);$("mOut").textContent="OUT "+fmt(S.outT);$("mIn").classList.toggle("on",S.inT!=null);$("mOut").classList.toggle("on",S.outT!=null);$("mVert").textContent="9:16 "+(S.vertical?"ON":"OFF");$("mVert").classList.toggle("on",S.vertical)}
+async function api(path,body){
+  const r=await fetch(path,{method:body?"POST":"GET",headers:{"Content-Type":"application/json","X-Passcode":S.pass},body:body?JSON.stringify(body):undefined});
+  const d=await r.json().catch(()=>({error:"Bad response"}));if(r.status===401){say("Passcode needed: type  pass <code>","e")}
+  if(!r.ok)throw new Error(d.error||r.statusText);return d}
+// ---------- YouTube player
+let ytReady=new Promise(r=>window.onYouTubeIframeAPIReady=r);
+const tag=document.createElement("script");tag.src="https://www.youtube.com/iframe_api";document.head.appendChild(tag);
+const vidId=u=>{const m=u.match(/(?:v=|youtu\.be\/|\/live\/|\/shorts\/|\/embed\/)([\w-]{11})/);return m&&m[1]};
+async function load(url){
+  const id=vidId(url);if(!id)return say("That doesn't look like a YouTube video link.","e");
+  S.url=url;S.inT=S.outT=null;marks();$("empty").style.display="none";$("peaks").innerHTML="";
+  say("Loading "+url,"u");
+  ytReady.then(()=>{if(S.player?.loadVideoById)S.player.loadVideoById(id);else S.player=new YT.Player("player",{videoId:id,playerVars:{autoplay:1,playsinline:1}})});
+  try{S.info=await api("/api/info",{url});$("title").textContent=S.info.title+" · "+(S.info.channel||"");$("live").style.display=S.info.is_live?"inline":"none";
+    say((S.info.is_live?"LIVE stream":"Video")+": "+S.info.title,"k");
+    if(S.info.peaks.length){say(`Most-replayed moments found: ${S.info.peaks.length}. Type  peaks  or click one below.`);showPeaks()}
+  }catch(e){S.info=null;say("Info lookup failed: "+e.message+" (you can still clip)","e")}
+}
+function showPeaks(){$("peaks").innerHTML="";(S.info?.peaks||[]).forEach((p,i)=>{const b=document.createElement("button");b.textContent=`🔥 ${i+1} · ${fmt(p.t)}`;b.title="Clip 15s before to 15s after this moment";b.onclick=()=>exec("peak "+(i+1));$("peaks").appendChild(b)})}
+const now=()=>{try{return S.player.getCurrentTime()||0}catch(e){return 0}};
+const isLive=()=>{if(S.info)return S.info.is_live;try{return !!S.player.getVideoData().isLive}catch(e){return false}};
+const behindLive=()=>{try{return Math.max(0,S.player.getDuration()-S.player.getCurrentTime()-3)}catch(e){return 0}};
+async function clip(req){
+  if(!S.url)return say("Load a stream first:  load <url>","e");
+  try{const j=await api("/api/clip",{url:S.url,title:S.info?.title||"",vertical:S.vertical,...req});say("Clip queued: "+j.label,"k");poll()}catch(e){say(e.message,"e")}
+}
+// ---------- commands
+const HELP=`Commands
+  load <url>        open a YouTube live stream or video (or just paste the link)
+  clip 30           clip the last 30 s up to where the player is now (live: from the live edge)
+  clip 1:20-1:50    clip a time range (works on finished videos and live DVR)
+  in / out / clip   mark in, mark out, then clip between the marks
+  peaks             list the most-replayed moments (finished videos)
+  peak 2            clip 15 s either side of most-replayed moment 2
+  vertical on|off   also export a 9:16 version for Reels/Shorts
+  seek 12:30        jump the player
+  pass <code>       enter the site passcode
+  clear             clear this console`;
+async function exec(raw){
+  const line=raw.trim();if(!line)return;say("> "+line,"u");
+  if(/^https?:\/\//.test(line))return load(line);
+  const [c,...rest]=line.split(/\s+/);const arg=rest.join(" ");
+  switch(c.toLowerCase()){
+    case"help":case"?":return say(HELP);
+    case"load":case"open":return load(arg);
+    case"pass":S.pass=arg;try{localStorage.setItem("clipperPass",arg)}catch(e){}say("Passcode saved for this browser.");return poll();
+    case"in":S.inT=now();marks();return say("IN at "+fmt(S.inT));
+    case"out":S.outT=now();marks();return say("OUT at "+fmt(S.outT));
+    case"seek":{const t=parseT(arg);if(isNaN(t))return say("Usage: seek 12:30","e");S.player?.seekTo(t,true);return}
+    case"vertical":case"v":S.vertical=arg?arg==="on":!S.vertical;try{localStorage.setItem("clipperVert",S.vertical?"1":"0")}catch(e){}marks();return say("9:16 export "+(S.vertical?"on":"off"));
+    case"peaks":if(!S.info?.peaks?.length)return say("No most-replayed data for this video (YouTube only has it for finished videos with enough views).");return S.info.peaks.forEach((p,i)=>say(`  ${i+1}. ${fmt(p.t)}  (score ${p.score})`));
+    case"peak":{const p=S.info?.peaks?.[+arg-1];if(!p)return say("No such peak. Type  peaks","e");return clip({mode:"range",start:Math.max(0,p.t-15),end:p.t+15})}
+    case"clear":$("out").innerHTML="";return;
+    case"clip":{
+      if(!arg){if(S.inT==null||S.outT==null)return say("Set both marks first (in, out), or use  clip 30","e");
+        const [a,b]=[S.inT,S.outT].sort((x,y)=>x-y);
+        if(isLive())return clip({mode:"last",seconds:b-a,behind:behindLive()+(now()-b)});
+        return clip({mode:"range",start:a,end:b})}
+      const r=arg.match(/^([\d:.]+)\s*-\s*([\d:.]+)$/);
+      if(r){const a=parseT(r[1]),b=parseT(r[2]);if(isNaN(a)||isNaN(b)||b<=a)return say("Usage: clip 1:20-1:50","e");return clip({mode:"range",start:a,end:b,live:!!isLive()})}
+      const n=parseT(arg);if(isNaN(n)||n<=0)return say("Usage: clip 30  or  clip 1:20-1:50","e");
+      if(isLive())return clip({mode:"last",seconds:n,behind:behindLive()});
+      const t=now();return clip({mode:"range",start:Math.max(0,t-n),end:t})}
+    default:say(`Unknown command "${c}". Type  help`,"e")}
+}
+function submit(){const v=$("cmd").value;$("cmd").value="";if(v.trim()){S.history.unshift(v);S.hi=-1}exec(v)}
+$("cmd").addEventListener("keydown",e=>{if(e.key==="Enter")submit();
+  else if(e.key==="ArrowUp"){S.hi=Math.min(S.hi+1,S.history.length-1);$("cmd").value=S.history[S.hi]??""}
+  else if(e.key==="ArrowDown"){S.hi=Math.max(S.hi-1,-1);$("cmd").value=S.history[S.hi]??""}});
+document.addEventListener("keydown",e=>{if(e.target.tagName==="INPUT")return;const k=e.key.toLowerCase();
+  if(k==="/"){e.preventDefault();$("cmd").focus()}else if(k==="i")exec("in");else if(k==="o")exec("out");else if(k==="c")exec("clip");else if(k==="l")exec("clip 30");else if(k==="v")exec("vertical")});
+document.addEventListener("paste",e=>{if(e.target.tagName==="INPUT")return;const t=e.clipboardData.getData("text");if(/youtu/.test(t))exec(t)});
+// ---------- jobs
+let pollT=null;
+async function poll(){clearTimeout(pollT);let jobs;try{jobs=await api("/api/jobs")}catch(e){return}
+  $("jobs").innerHTML=jobs.length?"":'<div class="help">No clips yet.</div>';
+  for(const j of jobs){const d=document.createElement("div");d.className="job";
+    d.innerHTML=`<div><span class="st ${j.status}">${j.status}</span> · ${j.label}</div><div class="help" style="margin:2px 0 0">${(j.title||"").replace(/</g,"&lt;")}</div>`+
+      (j.status==="done"?`<video controls preload="metadata" src="/clips/${j.files[0]}"></video><div>${j.files.map(f=>`<a href="/clips/${f}" download>⬇ ${f.includes("9x16")?"9:16":"original"}</a>`).join("")}</div>`:`<pre>${j.log.join("\n").replace(/</g,"&lt;")}</pre>`);
+    $("jobs").appendChild(d)}
+  if(jobs.some(j=>j.status==="running"||j.status==="queued"))pollT=setTimeout(poll,1500)}
+api("/api/config").then(c=>{if(c.passcode_required&&!S.pass)say("This site has a passcode. Type  pass <code>","k")}).catch(()=>{});
+marks();say("Ready. Paste a YouTube live link, or type  help","k");poll();
+const q=new URLSearchParams(location.search).get("url");if(q)load(q);
+</script></body></html>
