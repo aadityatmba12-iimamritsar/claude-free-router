@@ -1,0 +1,96 @@
+<!doctype html><html><head><meta charset="utf-8">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@500;700;900&display=swap');
+*{box-sizing:border-box;margin:0}
+html,body{width:1080px;height:1920px;background:#000;overflow:hidden;font-family:Inter,Arial,sans-serif;color:#fff}
+#bar{position:absolute;top:0;left:0;height:10px;background:#FFC23D;z-index:9}
+#grid{position:absolute;inset:0;opacity:.18;background-image:linear-gradient(#FFC23D22 1px,transparent 1px),linear-gradient(90deg,#FFC23D22 1px,transparent 1px);background-size:90px 90px}
+canvas{position:absolute;left:0;top:0}
+.s{position:absolute;left:80px;width:880px;top:300px;height:1180px;display:flex;flex-direction:column;justify-content:center;opacity:0}
+.k{font-size:30px;font-weight:700;letter-spacing:.32em;color:#FFC23D;margin-bottom:28px}
+.h{font-size:84px;font-weight:900;line-height:1.04;letter-spacing:-.02em}
+.b{font-size:44px;font-weight:500;line-height:1.3;margin-top:34px;color:#e9e9e9}
+.big{white-space:nowrap;font-size:190px;font-weight:900;line-height:.95;color:#FFC23D;letter-spacing:-.04em}
+.red{color:#FF5A4E}.a{color:#FFC23D}
+.src{position:absolute;left:80px;top:1440px;font-size:24px;color:#8a8a8a;font-weight:500}
+.plate{display:inline-block;background:#141414;border:3px solid #FFC23D;padding:10px 26px;font-weight:900;font-size:46px;letter-spacing:.06em;margin-top:30px}
+.dots{display:flex;flex-wrap:wrap;gap:14px;width:690px;margin-top:40px}
+.dot{width:72px;height:72px;border-radius:50%;background:#FF5A4E;opacity:0}
+.dot.g{background:#FFC23D}
+.mark{font-weight:900;font-size:64px;letter-spacing:.08em;margin-top:60px}
+.mark span{color:#FFC23D}
+</style></head><body>
+<div id="grid"></div><canvas id="c" width="1080" height="1920"></canvas><div id="bar"></div>
+
+<div class="s" id="s0"><div class="k">GRAVITON RESEARCH CAPITAL</div>
+<div class="h">2 friends from <span class="a">IIT Delhi</span>.<br>Now worth about <span class="a">$1 billion</span> each.</div>
+<div class="b">Not from an app. Not from a hit product.<br>From trading faster than everyone else.</div></div>
+
+<div class="s" id="s1"><div class="k">2014</div>
+<div class="h">Nishil Gupta &amp; Ankit Gupta.<br><span class="a">Not related.</span></div>
+<div class="b">They met at IIT Delhi, then started Graviton with about <b class="a">$1 million</b>.</div></div>
+
+<div class="s" id="s2"><div class="k">THE BUSINESS</div>
+<div class="h">High-frequency trading.</div>
+<div class="b">Code that trades India's futures &amp; options in fractions of a second. No customers. Only its own money.</div>
+<div><span class="plate">SPEED = EDGE</span></div></div>
+
+<div class="s" id="s3"><div class="k">YEAR TO MARCH 2024 · PROFIT AFTER TAX</div>
+<div class="big">₹<span class="n" data-to="1010">0</span> cr</div>
+<div class="b">About <b class="a">$115 million</b> in one year.</div></div>
+
+<div class="s" id="s4"><div class="k">YEAR TO MARCH 2025 · GROUP PROFIT</div>
+<div class="big">₹<span class="n" data-to="1200">0</span> cr</div>
+<div class="b">About <b class="a">$126 million</b>, on <b>₹7,380 cr</b> revenue.</div></div>
+
+<div class="s" id="s5"><div class="k" style="color:#FF5A4E">THE OTHER SIDE · SEBI, FY25</div>
+<div class="h"><span class="red">91</span> of every 100 individual F&amp;O traders <span class="red">lost money.</span></div>
+<div class="dots" id="dots"></div></div>
+
+<div class="s" id="s6"><div class="k">YEAR TO MARCH 2026</div>
+<div class="h">Singapore profit <span class="a">+166%</span><br>to $142 million.</div>
+<div class="b">India profit fell 25%. Graviton now earns more abroad than at home.</div></div>
+
+<div class="s" id="s7"><div class="k">THE MBA LESSON</div>
+<div class="h">Most traders bet on <span class="red">direction</span>.<br>Graviton sells <span class="a">speed and process</span>.</div>
+<div class="b">Same market. Opposite business model.</div></div>
+
+<div class="s" id="s8" style="align-items:center;text-align:center"><div class="k">WANT THE FULL BREAKDOWN?</div>
+<div class="h">COMMENT<br><span class="a">"EDGE"</span></div>
+<div class="mark">OH <span>MBA</span></div>
+<div class="b" style="font-size:28px;color:#8a8a8a">Not investment advice.</div></div>
+
+<div class="src" id="src"></div>
+<script>
+const D=[3.4,3.6,3.8,3.4,3.6,4.2,3.6,3.6,3.0];
+const SRC=["Bloomberg, 2026","Bloomberg, Business Standard","","Business Standard","Bloomberg","SEBI study, July 2025","Bloomberg, Finance Magnates","","" ];
+const T0=D.reduce((a,d,i)=>(a.push((a[i-1]??0)+(D[i-1]??0)),a),[]);
+const TOTAL=D.reduce((a,b)=>a+b,0);
+const dots=document.getElementById('dots');
+for(let i=0;i<100;i++){const e=document.createElement('div');e.className='dot'+(i>=91?' g':'');e.style.width=e.style.height='72px';dots.appendChild(e)}
+dots.style.gap='14px';[...dots.children].forEach(d=>{d.style.width='72px';d.style.height='72px'});
+// shrink to fit 10x10
+[...dots.children].forEach(d=>{d.style.width='58px';d.style.height='58px'});dots.style.gap='10px 12px';
+const ease=x=>1-Math.pow(1-Math.min(Math.max(x,0),1),3);
+const ctx=document.getElementById('c').getContext('2d');
+function ticker(t){ // own-made price line, deterministic
+  ctx.clearRect(0,0,1080,1920);ctx.strokeStyle='rgba(255,194,61,.35)';ctx.lineWidth=4;ctx.beginPath();
+  for(let x=0;x<=1080;x+=6){const u=x/1080*9+t*1.4;const y=1700+Math.sin(u)*40+Math.sin(u*2.7)*18+Math.sin(u*7.3)*7;x?ctx.lineTo(x,y):ctx.moveTo(x,y)}
+  ctx.stroke();
+}
+window.seek=function(t){
+  document.getElementById('bar').style.width=(1080*Math.min(t/TOTAL,1))+'px';
+  ticker(t);
+  let cur=0;
+  D.forEach((d,i)=>{const el=document.getElementById('s'+i);const l=t-T0[i];
+    const fin=i===0?1:ease(l/0.13), fout=i===D.length-1?1:1-ease((l-(d-0.13))/0.13);
+    const on=l>=0&&l<d;el.style.opacity=on?Math.min(fin,fout):0;
+    el.style.transform=`translateY(${on?(1-ease(l/0.35))*40:0}px)`;
+    if(on)cur=i;
+    el.querySelectorAll('.n').forEach(n=>{const to=+n.dataset.to;n.textContent=Math.round(to*ease(l/0.9)).toLocaleString('en-IN')});
+  });
+  document.getElementById('src').textContent=SRC[cur]?'Source: '+SRC[cur]:'';
+  const l5=t-T0[5];[...dots.children].forEach((d,i)=>d.style.opacity=l5<0?0:(l5>0.3+i*0.018?1:0));
+};
+window.TOTAL=TOTAL;window.T0=T0;window.D=D;seek(0);
+</script></body></html>
