@@ -54,14 +54,18 @@ kbd{background:#222;border:1px solid #333;border-radius:4px;padding:0 5px;font-s
 </main>
 <script>
 const $=id=>document.getElementById(id);
-const S={url:"",info:null,inT:null,outT:null,vertical:false,pass:"",player:null,history:[],hi:-1};
-try{S.pass=localStorage.getItem("clipperPass")||"";S.vertical=localStorage.getItem("clipperVert")==="1"}catch(e){}
+const S={api:"",url:"",info:null,inT:null,outT:null,vertical:false,pass:"",player:null,history:[],hi:-1};
+try{S.api=localStorage.getItem("clipperApi")||"";S.pass=localStorage.getItem("clipperPass")||"";S.vertical=localStorage.getItem("clipperVert")==="1"}catch(e){}
 const fmt=s=>{if(s==null||isNaN(s))return"—";s=Math.max(0,s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=(s%60).toFixed(1).padStart(4,"0");return(h?h+":"+String(m).padStart(2,"0"):m)+":"+x};
 const parseT=t=>{if(/^\d+(\.\d+)?$/.test(t))return+t;const p=t.split(":").map(Number);if(p.some(isNaN))return NaN;return p.reduce((a,b)=>a*60+b,0)};
 function say(msg,cls=""){const d=document.createElement("div");d.className=cls;d.textContent=msg;$("out").appendChild(d);$("out").scrollTop=1e9}
 function marks(){$("mIn").textContent="IN "+fmt(S.inT);$("mOut").textContent="OUT "+fmt(S.outT);$("mIn").classList.toggle("on",S.inT!=null);$("mOut").classList.toggle("on",S.outT!=null);$("mVert").textContent="9:16 "+(S.vertical?"ON":"OFF");$("mVert").classList.toggle("on",S.vertical)}
+const qp=new URLSearchParams(location.search);if(qp.get("api")){S.api=qp.get("api");try{localStorage.setItem("clipperApi",S.api)}catch(e){}}
+const STATIC_HOST=!/^(localhost|127\.|0\.0\.0\.0|\[::1\])/.test(location.hostname)&&!document.querySelector('meta[name=clipper-backend]');
+const base=()=>S.api.replace(/\/+$/,"");
 async function api(path,body){
-  const r=await fetch(path,{method:body?"POST":"GET",headers:{"Content-Type":"application/json","X-Passcode":S.pass},body:body?JSON.stringify(body):undefined});
+  if(STATIC_HOST&&!S.api)throw new Error("No clipping server connected. Type  server <https://your-tunnel-url>");
+  const r=await fetch(base()+path,{method:body?"POST":"GET",headers:{"Content-Type":"application/json","X-Passcode":S.pass},body:body?JSON.stringify(body):undefined});
   const d=await r.json().catch(()=>({error:"Bad response"}));if(r.status===401){say("Passcode needed: type  pass <code>","e")}
   if(!r.ok)throw new Error(d.error||r.statusText);return d}
 // ---------- YouTube player
@@ -96,6 +100,7 @@ const HELP=`Commands
   peak 2            clip 15 s either side of most-replayed moment 2
   vertical on|off   also export a 9:16 version for Reels/Shorts
   seek 12:30        jump the player
+  server <url>      connect to your clipping server (the cloudflared link from your PC)
   pass <code>       enter the site passcode
   clear             clear this console`;
 async function exec(raw){
@@ -105,6 +110,9 @@ async function exec(raw){
   switch(c.toLowerCase()){
     case"help":case"?":return say(HELP);
     case"load":case"open":return load(arg);
+    case"server":{if(!arg)return say("Connected server: "+(S.api||(STATIC_HOST?"none":"this computer")));
+      S.api=/^https?:\/\//.test(arg)?arg:"https://"+arg;try{localStorage.setItem("clipperApi",S.api)}catch(e){}
+      try{const c=await api("/api/config");say("Connected to "+S.api+(c.passcode_required?" (passcode required: type  pass <code>)":""),"k");poll()}catch(e){say("Could not reach "+S.api+": "+e.message,"e")}return}
     case"pass":S.pass=arg;try{localStorage.setItem("clipperPass",arg)}catch(e){}say("Passcode saved for this browser.");return poll();
     case"in":S.inT=now();marks();return say("IN at "+fmt(S.inT));
     case"out":S.outT=now();marks();return say("OUT at "+fmt(S.outT));
@@ -138,10 +146,12 @@ async function poll(){clearTimeout(pollT);let jobs;try{jobs=await api("/api/jobs
   $("jobs").innerHTML=jobs.length?"":'<div class="help">No clips yet.</div>';
   for(const j of jobs){const d=document.createElement("div");d.className="job";
     d.innerHTML=`<div><span class="st ${j.status}">${j.status}</span> · ${j.label}</div><div class="help" style="margin:2px 0 0">${(j.title||"").replace(/</g,"&lt;")}</div>`+
-      (j.status==="done"?`<video controls preload="metadata" src="/clips/${j.files[0]}"></video><div>${j.files.map(f=>`<a href="/clips/${f}" download>⬇ ${f.includes("9x16")?"9:16":"original"}</a>`).join("")}</div>`:`<pre>${j.log.join("\n").replace(/</g,"&lt;")}</pre>`);
+      (j.status==="done"?`<video controls preload="metadata" src="${base()}/clips/${j.files[0]}"></video><div>${j.files.map(f=>`<a href="${base()}/clips/${f}" download>⬇ ${f.includes("9x16")?"9:16":"original"}</a>`).join("")}</div>`:`<pre>${j.log.join("\n").replace(/</g,"&lt;")}</pre>`);
     $("jobs").appendChild(d)}
   if(jobs.some(j=>j.status==="running"||j.status==="queued"))pollT=setTimeout(poll,1500)}
-api("/api/config").then(c=>{if(c.passcode_required&&!S.pass)say("This site has a passcode. Type  pass <code>","k")}).catch(()=>{});
-marks();say("Ready. Paste a YouTube live link, or type  help","k");poll();
-const q=new URLSearchParams(location.search).get("url");if(q)load(q);
+marks();say("Ready. Paste a YouTube live link, or type  help","k");
+if(STATIC_HOST&&!S.api)say("Step 1: start the clipper on your PC (start-windows.bat + cloudflared), then type  server <https://….trycloudflare.com>","k");
+else api("/api/config").then(c=>{say("Clipping server: "+(S.api||"this computer"));if(c.passcode_required&&!S.pass)say("This server has a passcode. Type  pass <code>","k")}).catch(e=>say(e.message,"e"));
+poll();
+const q=qp.get("url");if(q)load(q);
 </script></body></html>

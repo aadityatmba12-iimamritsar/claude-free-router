@@ -1,0 +1,7 @@
+[build]
+  publish = "live-clipper/netlify"
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    Referrer-Policy = "strict-origin-when-cross-origin"

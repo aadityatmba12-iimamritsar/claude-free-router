@@ -156,9 +156,17 @@ def new_job(req):
 
 # ------------------------------------------------------------------ http
 class H(BaseHTTPRequestHandler):
+    def cors(self):
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Passcode")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+
+    def do_OPTIONS(self):
+        self.send_response(204); self.cors(); self.end_headers()
+
     def _send(self, code, body, ctype="application/json"):
         data = body if isinstance(body, bytes) else json.dumps(body).encode()
-        self.send_response(code); self.send_header("Content-Type", ctype)
+        self.send_response(code); self.cors(); self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data)
 
     def log_message(self, *a):
@@ -170,7 +178,9 @@ class H(BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split("?")[0]
         if path in ("/", "/index.html"):
-            return self._send(200, (ROOT / "static/index.html").read_bytes(), "text/html; charset=utf-8")
+            page = (ROOT / "static/index.html").read_bytes().replace(
+                b"<head>", b'<head><meta name="clipper-backend" content="1">', 1)
+            return self._send(200, page, "text/html; charset=utf-8")
         if path == "/api/config":
             return self._send(200, {"passcode_required": bool(PASS)})
         if path == "/api/jobs":
@@ -182,7 +192,7 @@ class H(BaseHTTPRequestHandler):
         if path.startswith("/clips/"):
             f = CLIPS / Path(path).name
             if f.exists() and f.suffix == ".mp4":
-                self.send_response(200); self.send_header("Content-Type", "video/mp4")
+                self.send_response(200); self.cors(); self.send_header("Content-Type", "video/mp4")
                 self.send_header("Content-Length", str(f.stat().st_size))
                 self.send_header("Content-Disposition", f'inline; filename="{f.name}"'); self.end_headers()
                 with f.open("rb") as fh:
